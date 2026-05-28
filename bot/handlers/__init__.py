@@ -14,6 +14,7 @@ from bot.handlers.settings import (
     settings_command, stats_command, profile_command,
     set_language_command, set_model_command, set_timezone_command,
 )
+from bot.handlers.export import export_command
 
 
 def register_handlers(app: Application) -> None:
@@ -44,6 +45,7 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("set_language", set_language_command))
     app.add_handler(CommandHandler("set_model", set_model_command))
     app.add_handler(CommandHandler("set_timezone", set_timezone_command))
+    app.add_handler(CommandHandler("export", export_command))
 
     # Callback queries (inline buttons)
     app.add_handler(CallbackQueryHandler(snooze_callback, pattern=r"^snooze:"))
