@@ -1,0 +1,45 @@
+services:
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: astra
+      POSTGRES_PASSWORD: astra_password
+      POSTGRES_DB: astra_companion
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U astra -d astra_companion"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    ports:
+      - "8000:8000"
+    volumes:
+      - chromadata:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  chromadata:

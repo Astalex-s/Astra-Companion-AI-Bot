@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venvAC/
+venv/
+.venv/
+
+# Environment
+.env
+
+# IDE & tools
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# ChromaDB local storage
+.chroma/
+chroma_data/
+
+# PostgreSQL data
+pgdata/
+
+# Logs
+*.log
+logs/
+
+# Tests
+.coverage
+htmlcov/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# ruff
+.ruff_cache/
+
+# Docs (ТЗ, чеклист, правила — не в репо)
+docs/
+
+# OS
+.DS_Store
+Thumbs.db

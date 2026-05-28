@@ -1,0 +1,37 @@
+# Telegram
+python-telegram-bot==21.10
+
+# AI
+openai==1.82.0
+langchain==0.3.25
+langchain-openai==0.3.18
+langchain-community==0.3.24
+
+# Database
+sqlalchemy[asyncio]==2.0.41
+asyncpg==0.30.0
+alembic==1.15.2
+
+# Vector DB (client-only, server runs in Docker)
+chromadb-client==0.6.3
+
+# Scheduler
+apscheduler==3.11.0
+
+# Config
+python-dotenv==1.1.0
+pydantic==2.11.3
+pydantic-settings==2.9.1
+
+# Encryption
+cryptography==44.0.3
+
+# Utils
+tiktoken==0.9.0
+
+# Dev
+pytest==8.3.5
+pytest-asyncio==0.26.0
+pytest-cov==6.1.1
+ruff==0.11.12
+mypy==1.15.0
