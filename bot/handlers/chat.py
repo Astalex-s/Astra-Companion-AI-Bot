@@ -6,6 +6,8 @@ from telegram.ext import ContextTypes
 
 from bot.database.postgres import async_session
 from bot.database.chromadb_client import ChromaDBClient
+from bot.middleware.auth import check_user_allowed
+from bot.middleware.rate_limiter import check_rate_limit
 from bot.services.user_service import UserService
 from bot.services.chat_service import ChatService
 from bot.services.fact_extraction import FactExtractionService
@@ -26,6 +28,11 @@ def _get_chroma() -> ChromaDBClient:
 async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming text messages — AI dialog."""
     if not update.message or not update.message.text:
+        return
+
+    if not await check_user_allowed(update, context):
+        return
+    if not await check_rate_limit(update, context):
         return
 
     await update.message.chat.send_action(ChatAction.TYPING)
