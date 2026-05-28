@@ -87,10 +87,10 @@ class TestChatServiceBuildContext:
         mock_result.scalars.return_value.all.return_value = []
         mock_session.execute.return_value = mock_result
 
-        messages = await chat_service._build_context(1, uuid.uuid4())
+        messages = await chat_service._build_context(1, uuid.uuid4(), "test")
 
         assert len(messages) == 1
-        assert messages[0].content == SYSTEM_PROMPT
+        assert SYSTEM_PROMPT in messages[0].content
 
     @pytest.mark.asyncio
     async def test_build_context_maps_roles_correctly(self, chat_service, mock_session):
@@ -107,7 +107,7 @@ class TestChatServiceBuildContext:
         mock_result.scalars.return_value.all.return_value = [msg1, msg2]
         mock_session.execute.return_value = mock_result
 
-        messages = await chat_service._build_context(1, uuid.uuid4())
+        messages = await chat_service._build_context(1, uuid.uuid4(), "test")
 
         assert len(messages) == 3  # system + user + assistant
         assert messages[1].content == "Hello"

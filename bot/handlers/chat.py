@@ -5,11 +5,22 @@ from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from bot.database.postgres import async_session
+from bot.database.chromadb_client import ChromaDBClient
 from bot.services.user_service import UserService
 from bot.services.chat_service import ChatService
+from bot.services.fact_extraction import FactExtractionService
 from bot.utils.formatters import split_message
 
 logger = logging.getLogger(__name__)
+
+_chroma = None
+
+
+def _get_chroma() -> ChromaDBClient:
+    global _chroma
+    if _chroma is None:
+        _chroma = ChromaDBClient()
+    return _chroma
 
 
 async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -20,6 +31,7 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.chat.send_action(ChatAction.TYPING)
 
     force_new = context.user_data.pop("force_new_session", False)
+    chroma = _get_chroma()
 
     async with async_session() as session:
         user_service = UserService(session)
@@ -29,10 +41,17 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             first_name=update.effective_user.first_name,
         )
 
-        chat_service = ChatService(session)
+        chat_service = ChatService(session, chroma=chroma)
         response = await chat_service.get_response(
             user, update.message.text, force_new_session=force_new,
         )
+
+        # Extract facts from user message (non-blocking, errors logged)
+        try:
+            fact_service = FactExtractionService(session, chroma)
+            await fact_service.extract_and_save(user.id, update.message.text)
+        except Exception as e:
+            logger.warning("Fact extraction failed: %s", e)
 
     for chunk in split_message(response):
         await update.message.reply_text(chunk)

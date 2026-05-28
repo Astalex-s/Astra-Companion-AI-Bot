@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings
-from bot.database.models import Message, User
+from bot.database.models import Fact, Message, User
+from bot.services.embedding_service import get_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +22,15 @@ SYSTEM_PROMPT = (
 )
 
 
-class ChatService:
-    """Manages AI dialog with short-term session memory."""
+MEMORY_CONTEXT_HEADER = "\n\n[Воспоминания о пользователе — используй для персонализации ответа]:\n"
 
-    def __init__(self, session: AsyncSession) -> None:
+
+class ChatService:
+    """Manages AI dialog with short-term session memory and long-term recall."""
+
+    def __init__(self, session: AsyncSession, chroma=None) -> None:
         self.session = session
+        self.chroma = chroma
         self._llm = ChatOpenAI(
             model=settings.openai_model,
             api_key=settings.openai_api_key,
@@ -49,8 +54,8 @@ class ChatService:
         self.session.add(user_msg)
         await self.session.flush()
 
-        # Build context from session history
-        messages = await self._build_context(user.id, session_id)
+        # Build context from session history + long-term memory
+        messages = await self._build_context(user.id, session_id, text)
 
         # Call AI
         ai_response = await self._llm.ainvoke(messages)
@@ -87,8 +92,8 @@ class ChatService:
 
         return uuid.uuid4()
 
-    async def _build_context(self, user_id: int, session_id: uuid.UUID) -> list:
-        """Build message list for AI from session history."""
+    async def _build_context(self, user_id: int, session_id: uuid.UUID, current_text: str) -> list:
+        """Build message list for AI from session history + long-term memory."""
         result = await self.session.execute(
             select(Message)
             .where(Message.user_id == user_id, Message.session_id == session_id)
@@ -97,7 +102,13 @@ class ChatService:
         )
         db_messages = result.scalars().all()
 
-        messages = [SystemMessage(content=SYSTEM_PROMPT)]
+        # Build system prompt with memories
+        system_content = SYSTEM_PROMPT
+        memories = await self._recall_memories(user_id, current_text)
+        if memories:
+            system_content += MEMORY_CONTEXT_HEADER + memories
+
+        messages = [SystemMessage(content=system_content)]
 
         for msg in db_messages:
             if msg.role == "user":
@@ -106,3 +117,33 @@ class ChatService:
                 messages.append(AIMessage(content=msg.content))
 
         return messages
+
+    async def _recall_memories(self, user_id: int, query_text: str) -> str:
+        """Search long-term memory for relevant facts."""
+        if not self.chroma:
+            return ""
+
+        try:
+            embedding = await get_embedding(query_text)
+        except Exception as e:
+            logger.warning("Failed to get embedding for memory recall: %s", e)
+            return ""
+
+        parts = []
+
+        # Search facts
+        try:
+            results = self.chroma.query(
+                user_id=user_id, data_type="facts",
+                query_embedding=embedding, n_results=5,
+            )
+            if results and results.get("documents") and results["documents"][0]:
+                distances = results.get("distances", [[]])[0]
+                for i, doc in enumerate(results["documents"][0]):
+                    score = 1 - distances[i] if i < len(distances) else 0
+                    if score > 0.3:
+                        parts.append(f"- {doc}")
+        except Exception as e:
+            logger.debug("Facts recall failed (may be empty): %s", e)
+
+        return "\n".join(parts)
