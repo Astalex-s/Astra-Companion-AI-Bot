@@ -1,4 +1,4 @@
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from bot.handlers.start import start_command, help_command
 from bot.handlers.chat import chat_message, new_session_command
@@ -9,6 +9,7 @@ from bot.handlers.tasks import (
     task_command, tasks_command, task_done_command,
     task_progress_command, task_delete_command,
 )
+from bot.handlers.reminders import remind_command, reminders_command, remind_delete_command, snooze_callback
 
 
 def register_handlers(app: Application) -> None:
@@ -30,6 +31,12 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("task_done", task_done_command))
     app.add_handler(CommandHandler("task_progress", task_progress_command))
     app.add_handler(CommandHandler("task_delete", task_delete_command))
+    app.add_handler(CommandHandler("remind", remind_command))
+    app.add_handler(CommandHandler("reminders", reminders_command))
+    app.add_handler(CommandHandler("remind_delete", remind_delete_command))
+
+    # Callback queries (inline buttons)
+    app.add_handler(CallbackQueryHandler(snooze_callback, pattern=r"^snooze:"))
 
     # Text messages — must be last (catch-all)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_message))
