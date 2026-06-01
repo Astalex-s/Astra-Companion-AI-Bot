@@ -26,6 +26,15 @@ BOT_COMMANDS = [
 async def post_init(app) -> None:
     """Called after the Application has been initialized (event loop is running)."""
     await app.bot.set_my_commands(BOT_COMMANDS)
+    await app.bot.set_my_short_description(
+        "AI-ассистент с памятью. Запоминаю факты, храню заметки и задачи, ищу по смыслу, напоминаю о важном."
+    )
+    await app.bot.set_my_description(
+        "Персональный AI-помощник с долговременной памятью.\n\n"
+        "Я запоминаю контекст между разговорами, храню заметки и задачи, "
+        "выполняю поиск по смыслу и напоминаю о важном. Понимаю текст и голос.\n\n"
+        "Просто напиши или скажи — я пойму, что нужно сделать."
+    )
     start_scheduler(app)
 
 

@@ -12,7 +12,7 @@ from bot.services.user_service import UserService
 from bot.services.chat_service import ChatService
 from bot.services.intent_service import IntentService
 from bot.services.fact_extraction import FactExtractionService
-from bot.utils.formatters import split_message
+from bot.utils.formatters import split_message, delete_previous_bot_message, save_bot_message
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +75,19 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         except Exception as e:
             logger.warning("Fact extraction failed: %s", e)
 
+    await delete_previous_bot_message(update.effective_chat.id, context)
+
+    msg = None
     for chunk in split_message(response):
-        await update.message.reply_text(chunk)
+        msg = await update.message.reply_text(chunk)
+
+    if msg:
+        await save_bot_message(msg, context)
 
 
 async def new_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /new command — reset conversation context."""
     context.user_data["force_new_session"] = True
-    await update.message.reply_text("Начинаю новый диалог. Контекст сброшен.")
+    await delete_previous_bot_message(update.effective_chat.id, context)
+    msg = await update.message.reply_text("Начинаю новый диалог. Контекст сброшен.")
+    await save_bot_message(msg, context)

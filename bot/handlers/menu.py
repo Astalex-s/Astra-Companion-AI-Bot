@@ -115,7 +115,10 @@ def export_keyboard() -> InlineKeyboardMarkup:
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /menu — show main inline menu."""
-    await update.message.reply_text("Главное меню:", reply_markup=main_menu_keyboard())
+    from bot.utils.formatters import delete_previous_bot_message, save_bot_message
+    await delete_previous_bot_message(update.effective_chat.id, context)
+    msg = await update.message.reply_text("Главное меню:", reply_markup=main_menu_keyboard())
+    await save_bot_message(msg, context)
 
 
 # --- Callback handler ---
@@ -148,6 +151,14 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     elif data == "menu:export":
         await query.edit_message_text("📤 Выберите формат экспорта:", reply_markup=export_keyboard())
+    elif data == "menu:models":
+        await query.edit_message_text("🤖 Выберите модель AI:", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("gpt-5.4-mini", callback_data="set:model:gpt-5.4-mini")],
+            [InlineKeyboardButton("gpt-4.1", callback_data="set:model:gpt-4.1")],
+            [InlineKeyboardButton("gpt-4.1-mini", callback_data="set:model:gpt-4.1-mini")],
+            [InlineKeyboardButton("gpt-4o", callback_data="set:model:gpt-4o")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="action:settings")],
+        ]))
 
     # Actions — create (prompt for input)
     elif data == "action:note_create":
@@ -196,6 +207,20 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await _action_stats(query)
     elif data == "action:settings":
         await _action_settings(query)
+
+    # Settings actions
+    elif data.startswith("set:lang:"):
+        await _set_language(query, data.split(":")[2])
+    elif data.startswith("set:model:"):
+        await _set_model(query, data.split(":")[2])
+    elif data.startswith("set:tz:"):
+        await _set_timezone(query, data.split(":")[2])
+    elif data == "set:digest_toggle":
+        await _toggle_digest(query)
+    elif data.startswith("set:digest_time:"):
+        await _set_digest_time(query, data.split(":")[2])
+    elif data == "menu:digest_time":
+        await _show_digest_time_menu(query)
 
     # Actions — export
     elif data == "action:export_json":
@@ -356,21 +381,101 @@ async def _action_settings(query) -> None:
         user_service = UserService(session)
         user = await user_service.get_or_create_user(telegram_id=query.from_user.id)
 
+    lang_label = {"ru": "Русский", "en": "English"}.get(user.language, user.language)
+    digest_label = "вкл" if user.morning_digest else "выкл"
+
     text = (
         f"⚙️ Настройки:\n\n"
-        f"Язык: {user.language}\n"
-        f"Модель AI: {user.ai_model}\n"
-        f"Часовой пояс: {user.timezone}\n"
-        f"Утренний дайджест: {'вкл' if user.morning_digest else 'выкл'}\n\n"
-        f"Изменить:\n"
-        f"/set_language ru|en\n"
-        f"/set_model <model>\n"
-        f"/set_timezone Europe/Moscow"
+        f"🌐 Язык: {lang_label}\n"
+        f"🤖 Модель: {user.ai_model}\n"
+        f"🕐 Часовой пояс: {user.timezone}\n"
+        f"📬 Утренний дайджест: {digest_label}\n"
+        f"⏰ Время дайджеста: {user.digest_time}"
     )
 
-    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")]
-    ]))
+    keyboard = [
+        [
+            InlineKeyboardButton("🌐 RU" if user.language == "ru" else "RU", callback_data="set:lang:ru"),
+            InlineKeyboardButton("🌐 EN" if user.language == "en" else "EN", callback_data="set:lang:en"),
+        ],
+        [
+            InlineKeyboardButton("🤖 Модель: " + user.ai_model, callback_data="menu:models"),
+        ],
+        [
+            InlineKeyboardButton("🕐 Москва", callback_data="set:tz:Europe/Moscow"),
+            InlineKeyboardButton("🕐 UTC", callback_data="set:tz:UTC"),
+            InlineKeyboardButton("🕐 Екб", callback_data="set:tz:Asia/Yekaterinburg"),
+        ],
+        [
+            InlineKeyboardButton(
+                f"📬 Дайджест: {digest_label}", callback_data="set:digest_toggle"
+            ),
+            InlineKeyboardButton("⏰ Время", callback_data="menu:digest_time"),
+        ],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")],
+    ]
+
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def _set_language(query, lang: str) -> None:
+    async with async_session() as session:
+        user_service = UserService(session)
+        user = await user_service.get_or_create_user(telegram_id=query.from_user.id)
+        user.language = lang
+        await session.commit()
+    await _action_settings(query)
+
+
+async def _set_model(query, model: str) -> None:
+    async with async_session() as session:
+        user_service = UserService(session)
+        user = await user_service.get_or_create_user(telegram_id=query.from_user.id)
+        user.ai_model = model
+        await session.commit()
+    await _action_settings(query)
+
+
+async def _set_timezone(query, tz: str) -> None:
+    async with async_session() as session:
+        user_service = UserService(session)
+        user = await user_service.get_or_create_user(telegram_id=query.from_user.id)
+        user.timezone = tz
+        await session.commit()
+    await _action_settings(query)
+
+
+async def _toggle_digest(query) -> None:
+    async with async_session() as session:
+        user_service = UserService(session)
+        user = await user_service.get_or_create_user(telegram_id=query.from_user.id)
+        user.morning_digest = not user.morning_digest
+        await session.commit()
+    await _action_settings(query)
+
+
+async def _show_digest_time_menu(query) -> None:
+    times = ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00"]
+    buttons = []
+    row = []
+    for t in times:
+        row.append(InlineKeyboardButton(t, callback_data=f"set:digest_time:{t}"))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="action:settings")])
+    await query.edit_message_text("Выберите время утреннего дайджеста:", reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def _set_digest_time(query, time: str) -> None:
+    async with async_session() as session:
+        user_service = UserService(session)
+        user = await user_service.get_or_create_user(telegram_id=query.from_user.id)
+        user.digest_time = time
+        await session.commit()
+    await _action_settings(query)
 
 
 async def _action_export_file(query, fmt: str) -> None:

@@ -116,7 +116,7 @@ async def set_language_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def set_model_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /set_model <model>."""
-    allowed = ("gpt-4o", "gpt-4o-mini")
+    allowed = ("gpt-5.4-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4o")
     if not context.args or context.args[0] not in allowed:
         await update.message.reply_text(f"Формат: /set_model {' | '.join(allowed)}")
         return

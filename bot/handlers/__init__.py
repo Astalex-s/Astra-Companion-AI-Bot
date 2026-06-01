@@ -88,7 +88,7 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("export", export_command))
 
     # Callback queries — menu and actions
-    app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(menu:|action:)"))
+    app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(menu:|action:|set:)"))
     app.add_handler(CallbackQueryHandler(snooze_callback, pattern=r"^snooze:"))
 
     # Voice messages

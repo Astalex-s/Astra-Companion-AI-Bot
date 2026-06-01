@@ -13,7 +13,7 @@ from bot.services.voice_service import transcribe_voice
 from bot.services.intent_service import IntentService
 from bot.services.chat_service import ChatService
 from bot.services.fact_extraction import FactExtractionService
-from bot.utils.formatters import split_message
+from bot.utils.formatters import split_message, delete_previous_bot_message, save_bot_message
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,8 @@ async def voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Не удалось распознать речь в сообщении.")
         return
 
-    # Show transcribed text
+    # Delete previous bot message and show transcribed text
+    await delete_previous_bot_message(update.effective_chat.id, context)
     await update.message.reply_text(f"🎤 Распознано: {text}")
     await update.message.chat.send_action(ChatAction.TYPING)
 
@@ -95,5 +96,9 @@ async def voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         except Exception as e:
             logger.warning("Fact extraction from voice failed: %s", e)
 
+    msg = None
     for chunk in split_message(response):
-        await update.message.reply_text(chunk)
+        msg = await update.message.reply_text(chunk)
+
+    if msg:
+        await save_bot_message(msg, context)

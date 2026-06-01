@@ -19,7 +19,7 @@ class User(Base):
     first_name: Mapped[str | None] = mapped_column(String(255))
     language: Mapped[str] = mapped_column(String(10), default="ru")
     timezone: Mapped[str] = mapped_column(String(50), default="Europe/Moscow")
-    ai_model: Mapped[str] = mapped_column(String(50), default="gpt-4o-mini")
+    ai_model: Mapped[str] = mapped_column(String(50), default="gpt-5.4-mini")
     morning_digest: Mapped[bool] = mapped_column(Boolean, default=False)
     digest_time: Mapped[str] = mapped_column(String(5), default="09:00")
     notion_export_page_id: Mapped[str | None] = mapped_column(String(255))
