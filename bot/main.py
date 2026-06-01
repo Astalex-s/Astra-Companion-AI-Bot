@@ -1,5 +1,6 @@
 import logging
 
+from telegram import BotCommand
 from telegram.ext import ApplicationBuilder
 
 from bot.config import settings
@@ -14,21 +15,41 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+BOT_COMMANDS = [
+    BotCommand("menu", "Главное меню"),
+    BotCommand("new", "Новый диалог"),
+    BotCommand("search", "Поиск по памяти"),
+    BotCommand("help", "Справка"),
+]
+
+
+async def post_init(app) -> None:
+    """Called after the Application has been initialized (event loop is running)."""
+    await app.bot.set_my_commands(BOT_COMMANDS)
+    start_scheduler(app)
+
+
+async def post_shutdown(app) -> None:
+    """Called before the Application shuts down."""
+    stop_scheduler()
+
+
 def main() -> None:
     logger.info("Starting AstraCompanion bot...")
 
-    app = ApplicationBuilder().token(settings.telegram_bot_token).build()
+    app = (
+        ApplicationBuilder()
+        .token(settings.telegram_bot_token)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
 
     register_handlers(app)
     app.add_error_handler(error_handler)
 
-    start_scheduler(app)
-
     logger.info("Bot is running. Press Ctrl+C to stop.")
-    try:
-        app.run_polling()
-    finally:
-        stop_scheduler()
+    app.run_polling()
 
 
 if __name__ == "__main__":

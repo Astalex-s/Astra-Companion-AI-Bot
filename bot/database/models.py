@@ -22,6 +22,7 @@ class User(Base):
     ai_model: Mapped[str] = mapped_column(String(50), default="gpt-4o-mini")
     morning_digest: Mapped[bool] = mapped_column(Boolean, default=False)
     digest_time: Mapped[str] = mapped_column(String(5), default="09:00")
+    notion_export_page_id: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

@@ -89,7 +89,7 @@ class TaskService:
 
         task.status = new_status
         if new_status == "done":
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.utcnow()
 
         await self.session.commit()
         return task

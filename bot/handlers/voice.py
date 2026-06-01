@@ -9,8 +9,9 @@ from bot.database.chromadb_client import ChromaDBClient
 from bot.middleware.auth import check_user_allowed
 from bot.middleware.rate_limiter import check_rate_limit
 from bot.services.user_service import UserService
-from bot.services.chat_service import ChatService
+from bot.services.voice_service import transcribe_voice
 from bot.services.intent_service import IntentService
+from bot.services.chat_service import ChatService
 from bot.services.fact_extraction import FactExtractionService
 from bot.utils.formatters import split_message
 
@@ -26,9 +27,9 @@ def _get_chroma() -> ChromaDBClient:
     return _chroma
 
 
-async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle incoming text messages — AI dialog."""
-    if not update.message or not update.message.text:
+async def voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle incoming voice messages: transcribe -> detect intent -> execute or chat."""
+    if not update.message or not update.message.voice:
         return
 
     if not await check_user_allowed(update, context):
@@ -38,7 +39,26 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await update.message.chat.send_action(ChatAction.TYPING)
 
-    force_new = context.user_data.pop("force_new_session", False)
+    # Download and transcribe voice
+    voice = update.message.voice
+    voice_file = await context.bot.get_file(voice.file_id)
+    voice_bytes = await voice_file.download_as_bytearray()
+
+    try:
+        text = await transcribe_voice(bytes(voice_bytes))
+    except Exception as e:
+        logger.error("Voice transcription failed: %s", e)
+        await update.message.reply_text("Не удалось распознать голосовое сообщение.")
+        return
+
+    if not text:
+        await update.message.reply_text("Не удалось распознать речь в сообщении.")
+        return
+
+    # Show transcribed text
+    await update.message.reply_text(f"🎤 Распознано: {text}")
+    await update.message.chat.send_action(ChatAction.TYPING)
+
     chroma = _get_chroma()
 
     async with async_session() as session:
@@ -49,37 +69,31 @@ async def chat_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             first_name=update.effective_user.first_name,
         )
 
-        text = update.message.text
-
-        # Detect intent from natural language (e.g. "запиши заметку...")
+        # Detect intent
         intent_service = IntentService(session, chroma)
         intent_data = await intent_service.detect_intent(text)
         intent = intent_data.get("intent", "chat")
 
-        if intent != "chat" and not force_new:
-            response = await intent_service.execute_intent(user.id, intent_data)
-            if not response:
+        if intent != "chat":
+            # Execute action
+            result = await intent_service.execute_intent(user.id, intent_data)
+            if result:
+                response = result
+            else:
                 # Fallback to chat if execution returned None
                 chat_service = ChatService(session, chroma=chroma)
                 response = await chat_service.get_response(user, text)
         else:
+            # Regular chat
             chat_service = ChatService(session, chroma=chroma)
-            response = await chat_service.get_response(
-                user, text, force_new_session=force_new,
-            )
+            response = await chat_service.get_response(user, text)
 
-        # Extract facts from user message (non-blocking, errors logged)
+        # Extract facts from voice text
         try:
             fact_service = FactExtractionService(session, chroma)
             await fact_service.extract_and_save(user.id, text)
         except Exception as e:
-            logger.warning("Fact extraction failed: %s", e)
+            logger.warning("Fact extraction from voice failed: %s", e)
 
     for chunk in split_message(response):
         await update.message.reply_text(chunk)
-
-
-async def new_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /new command — reset conversation context."""
-    context.user_data["force_new_session"] = True
-    await update.message.reply_text("Начинаю новый диалог. Контекст сброшен.")

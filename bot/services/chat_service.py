@@ -14,9 +14,11 @@ from bot.services.embedding_service import get_embedding
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
-    "Ты — AstraCompanion, персональный AI-ассистент в Telegram. "
+    "Ты — AstraCompanion, персональный AI-ассистент в Telegram с долговременной памятью. "
     "Ты дружелюбный, полезный и внимательный. "
-    "Ты помнишь контекст текущего разговора. "
+    "У тебя ЕСТЬ долговременная память — ты хранишь факты о пользователе между разговорами. "
+    "Если ниже в разделе [Воспоминания] есть информация о пользователе — ОБЯЗАТЕЛЬНО используй её в ответе. "
+    "Никогда не говори, что ты не помнишь или не хранишь данные, если воспоминания присутствуют. "
     "Отвечай кратко и по делу, если пользователь не просит подробного ответа. "
     "Отвечай на том языке, на котором пишет пользователь."
 )
@@ -76,7 +78,7 @@ class ChatService:
 
     async def _get_or_create_session_id(self, user_id: int) -> uuid.UUID:
         """Get current session ID or create a new one if timed out."""
-        timeout = datetime.now(timezone.utc) - timedelta(minutes=settings.session_timeout_minutes)
+        timeout = datetime.utcnow() - timedelta(minutes=settings.session_timeout_minutes)
 
         result = await self.session.execute(
             select(Message)
@@ -119,31 +121,39 @@ class ChatService:
         return messages
 
     async def _recall_memories(self, user_id: int, query_text: str) -> str:
-        """Search long-term memory for relevant facts."""
-        if not self.chroma:
-            return ""
-
-        try:
-            embedding = await get_embedding(query_text)
-        except Exception as e:
-            logger.warning("Failed to get embedding for memory recall: %s", e)
-            return ""
-
+        """Build long-term memory context from stored facts and semantic search."""
         parts = []
 
-        # Search facts
+        # Always include all user facts from PostgreSQL — they are always relevant
         try:
-            results = self.chroma.query(
-                user_id=user_id, data_type="facts",
-                query_embedding=embedding, n_results=5,
+            result = await self.session.execute(
+                select(Fact).where(Fact.user_id == user_id)
             )
-            if results and results.get("documents") and results["documents"][0]:
-                distances = results.get("distances", [[]])[0]
-                for i, doc in enumerate(results["documents"][0]):
-                    score = 1 - distances[i] if i < len(distances) else 0
-                    if score > 0.3:
-                        parts.append(f"- {doc}")
+            facts = result.scalars().all()
+            for fact in facts:
+                parts.append(f"- {fact.key}: {fact.value}")
         except Exception as e:
-            logger.debug("Facts recall failed (may be empty): %s", e)
+            logger.warning("Failed to load facts from DB: %s", e)
+
+        # Semantic search for relevant notes/messages via ChromaDB
+        if self.chroma:
+            try:
+                embedding = await get_embedding(query_text)
+                for data_type in ("notes", "messages"):
+                    try:
+                        results = self.chroma.query(
+                            user_id=user_id, data_type=data_type,
+                            query_embedding=embedding, n_results=3,
+                        )
+                        if results and results.get("documents") and results["documents"][0]:
+                            distances = results.get("distances", [[]])[0]
+                            for i, doc in enumerate(results["documents"][0]):
+                                score = 1 - distances[i] if i < len(distances) else 0
+                                if score > 0.3:
+                                    parts.append(f"- {doc}")
+                    except Exception as e:
+                        logger.debug("Recall from %s failed (may be empty): %s", data_type, e)
+            except Exception as e:
+                logger.warning("Failed to get embedding for memory recall: %s", e)
 
         return "\n".join(parts)

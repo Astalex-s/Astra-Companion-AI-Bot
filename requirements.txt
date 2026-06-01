@@ -26,6 +26,13 @@ pydantic-settings==2.9.1
 # Encryption
 cryptography==44.0.3
 
+# Notion
+notion-client==2.3.0
+
+# Google Docs
+google-api-python-client==2.165.0
+google-auth==2.40.1
+
 # Utils
 tiktoken==0.9.0
 

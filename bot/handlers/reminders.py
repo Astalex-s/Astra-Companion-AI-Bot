@@ -1,26 +1,42 @@
 from datetime import datetime, timedelta, timezone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 
 from bot.database.postgres import async_session
 from bot.services.user_service import UserService
 from bot.services.reminder_service import ReminderService
 
+WAITING_REMIND_TEXT = 0
 
-async def remind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /remind <time> <text> — create a reminder."""
-    if not context.args:
-        await update.message.reply_text(
-            "Формат: /remind <время и текст>\n"
-            "Примеры:\n"
-            "  /remind через 2 часа позвонить маме\n"
-            "  /remind завтра в 10:00 встреча с командой"
-        )
-        return
 
-    text = " ".join(context.args)
+async def remind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
+    """Handle /remind [time and text] — create a reminder or start conversation."""
+    if context.args:
+        text = " ".join(context.args)
+        await _create_and_reply(update, text)
+        return ConversationHandler.END
 
+    await update.message.reply_text(
+        "Напишите напоминание с указанием времени.\n"
+        "Например: завтра в 10:00 встреча с командой"
+    )
+    return WAITING_REMIND_TEXT
+
+
+async def remind_text_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle reminder text in conversation mode."""
+    text = update.message.text
+    if not text:
+        await update.message.reply_text("Пустой текст. Попробуйте ещё раз или /cancel.")
+        return WAITING_REMIND_TEXT
+
+    await _create_and_reply(update, text)
+    return ConversationHandler.END
+
+
+async def _create_and_reply(update: Update, text: str) -> None:
+    """Create reminder and send reply."""
     async with async_session() as session:
         user_service = UserService(session)
         user = await user_service.get_or_create_user(telegram_id=update.effective_user.id)
@@ -94,14 +110,13 @@ async def snooze_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
 
-    # callback_data format: "snooze:<reminder_id>:<minutes>"
     parts = query.data.split(":")
     if len(parts) != 3:
         return
 
     reminder_id = int(parts[1])
     minutes = int(parts[2])
-    new_time = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    new_time = datetime.utcnow() + timedelta(minutes=minutes)
 
     async with async_session() as session:
         reminder_service = ReminderService(session)

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # OpenAI
     openai_api_key: str
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "gpt-5.4-mini"
     openai_embedding_model: str = "text-embedding-3-small"
 
     # PostgreSQL
@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Security
     encryption_key: str = ""
     rate_limit_per_minute: int = 30
+
+    # Notion
+    notion_api_token: str = ""
+    notion_parent_page_id: str = ""
 
     # Logging
     log_level: str = "INFO"

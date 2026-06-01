@@ -1,5 +1,5 @@
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 
 from bot.database.postgres import async_session
 from bot.database.chromadb_client import ChromaDBClient
@@ -7,6 +7,8 @@ from bot.services.user_service import UserService
 from bot.services.note_service import NoteService
 
 _chroma = None
+
+WAITING_NOTE_TEXT = 0
 
 
 def _get_chroma() -> ChromaDBClient:
@@ -16,14 +18,31 @@ def _get_chroma() -> ChromaDBClient:
     return _chroma
 
 
-async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /note <text> — create a new note."""
-    if not context.args:
-        await update.message.reply_text("Укажите текст заметки: /note <текст>")
-        return
+async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
+    """Handle /note [text] — create a new note or start conversation."""
+    if context.args:
+        # Fast mode: /note <text>
+        text = " ".join(context.args)
+        await _create_and_reply(update, text)
+        return ConversationHandler.END
 
-    text = " ".join(context.args)
+    await update.message.reply_text("Напишите текст заметки:")
+    return WAITING_NOTE_TEXT
 
+
+async def note_text_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle note text in conversation mode."""
+    text = update.message.text
+    if not text:
+        await update.message.reply_text("Пустой текст. Попробуйте ещё раз или /cancel.")
+        return WAITING_NOTE_TEXT
+
+    await _create_and_reply(update, text)
+    return ConversationHandler.END
+
+
+async def _create_and_reply(update: Update, text: str) -> None:
+    """Create note and send reply."""
     async with async_session() as session:
         user_service = UserService(session)
         user = await user_service.get_or_create_user(telegram_id=update.effective_user.id)

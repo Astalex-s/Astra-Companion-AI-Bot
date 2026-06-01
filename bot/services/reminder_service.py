@@ -45,7 +45,7 @@ class ReminderService:
             return None
 
         try:
-            trigger_at = datetime.strptime(parsed["trigger_at"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            trigger_at = datetime.strptime(parsed["trigger_at"], "%Y-%m-%d %H:%M")
         except (ValueError, TypeError):
             return None
 
@@ -72,7 +72,7 @@ class ReminderService:
 
     async def get_due_reminders(self) -> list[Reminder]:
         """Get all reminders that are due (trigger_at <= now)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         result = await self.session.execute(
             select(Reminder)
             .where(Reminder.status == "active", Reminder.trigger_at <= now)

@@ -1,5 +1,5 @@
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 
 from bot.database.postgres import async_session
 from bot.database.chromadb_client import ChromaDBClient
@@ -7,6 +7,10 @@ from bot.services.user_service import UserService
 from bot.services.task_service import TaskService
 
 _chroma = None
+
+WAITING_TASK_TEXT = 0
+
+PRIORITY_ICONS = {"low": "⬜", "medium": "🟡", "high": "🟠", "urgent": "🔴"}
 
 
 def _get_chroma() -> ChromaDBClient:
@@ -16,17 +20,30 @@ def _get_chroma() -> ChromaDBClient:
     return _chroma
 
 
-PRIORITY_ICONS = {"low": "⬜", "medium": "🟡", "high": "🟠", "urgent": "🔴"}
+async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
+    """Handle /task [description] — create a new task or start conversation."""
+    if context.args:
+        description = " ".join(context.args)
+        await _create_and_reply(update, description)
+        return ConversationHandler.END
+
+    await update.message.reply_text("Опишите задачу:")
+    return WAITING_TASK_TEXT
 
 
-async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /task <description> — create a new task."""
-    if not context.args:
-        await update.message.reply_text("Укажите описание: /task <текст>")
-        return
+async def task_text_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle task description in conversation mode."""
+    text = update.message.text
+    if not text:
+        await update.message.reply_text("Пустой текст. Попробуйте ещё раз или /cancel.")
+        return WAITING_TASK_TEXT
 
-    description = " ".join(context.args)
+    await _create_and_reply(update, text)
+    return ConversationHandler.END
 
+
+async def _create_and_reply(update: Update, description: str) -> None:
+    """Create task and send reply."""
     async with async_session() as session:
         user_service = UserService(session)
         user = await user_service.get_or_create_user(telegram_id=update.effective_user.id)
