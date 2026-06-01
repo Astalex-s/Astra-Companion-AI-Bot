@@ -54,7 +54,11 @@ jobs:
               git pull origin main
             else
               mkdir -p /opt/bots
+              # Save .env if it was written before clone
+              [ -f "$APP_DIR/.env" ] && cp "$APP_DIR/.env" /tmp/.env.bak
+              rm -rf "$APP_DIR"
               git clone https://github.com/Astalex-s/Astra-Companion-AI-Bot.git "$APP_DIR"
+              [ -f /tmp/.env.bak ] && mv /tmp/.env.bak "$APP_DIR/.env"
               cd "$APP_DIR"
             fi
 
