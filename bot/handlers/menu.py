@@ -60,6 +60,10 @@ def notes_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("➕ Создать", callback_data="action:note_create"),
             InlineKeyboardButton("📋 Список", callback_data="action:notes_list"),
         ],
+        [
+            InlineKeyboardButton("✏️ Редактировать", callback_data="action:note_edit"),
+            InlineKeyboardButton("🗑 Удалить", callback_data="action:note_delete"),
+        ],
         [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")],
     ])
 
@@ -71,7 +75,11 @@ def tasks_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("📋 Активные", callback_data="action:tasks_list"),
         ],
         [
-            InlineKeyboardButton("✅ Выполненные", callback_data="action:tasks_done"),
+            InlineKeyboardButton("✅ Выполнить", callback_data="action:task_done_prompt"),
+            InlineKeyboardButton("📋 Выполненные", callback_data="action:tasks_done"),
+        ],
+        [
+            InlineKeyboardButton("🗑 Удалить", callback_data="action:task_delete"),
         ],
         [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")],
     ])
@@ -82,6 +90,9 @@ def reminders_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("➕ Создать", callback_data="action:remind_create"),
             InlineKeyboardButton("📋 Список", callback_data="action:reminders_list"),
+        ],
+        [
+            InlineKeyboardButton("🗑 Удалить", callback_data="action:remind_delete"),
         ],
         [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")],
     ])
@@ -182,6 +193,46 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.edit_message_text(
             "⏰ Напишите напоминание с указанием времени:\n"
             "Например: завтра в 10:00 встреча с командой",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Отмена", callback_data="action:cancel")]
+            ]),
+        )
+    elif data == "action:note_edit":
+        context.user_data["awaiting_input"] = "note_edit"
+        await query.edit_message_text(
+            "✏️ Введите ID и новый текст заметки:\nНапример: 5 новый текст заметки",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Отмена", callback_data="action:cancel")]
+            ]),
+        )
+    elif data == "action:note_delete":
+        context.user_data["awaiting_input"] = "note_delete"
+        await query.edit_message_text(
+            "🗑 Введите ID заметки для удаления:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Отмена", callback_data="action:cancel")]
+            ]),
+        )
+    elif data == "action:task_done_prompt":
+        context.user_data["awaiting_input"] = "task_done"
+        await query.edit_message_text(
+            "✅ Введите ID задачи для завершения:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Отмена", callback_data="action:cancel")]
+            ]),
+        )
+    elif data == "action:task_delete":
+        context.user_data["awaiting_input"] = "task_delete"
+        await query.edit_message_text(
+            "🗑 Введите ID задачи для удаления:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Отмена", callback_data="action:cancel")]
+            ]),
+        )
+    elif data == "action:remind_delete":
+        context.user_data["awaiting_input"] = "remind_delete"
+        await query.edit_message_text(
+            "🗑 Введите ID напоминания для удаления:",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("❌ Отмена", callback_data="action:cancel")]
             ]),

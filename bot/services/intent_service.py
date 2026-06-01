@@ -23,20 +23,29 @@ INTENT_PROMPT = """Ты — классификатор намерений пол
 - create_task — создать задачу. params: {"description": "описание задачи"}
 - list_tasks — показать задачи. params: {"status": "done" или null для активных}
 - task_done — отметить задачу выполненной. params: {"task_id": число}
+- delete_note — удалить заметку. params: {"note_id": число}
+- delete_task — удалить задачу. params: {"task_id": число}
 - create_reminder — создать напоминание. params: {"text": "полный текст с временем"}
 - list_reminders — показать напоминания. params: {}
+- delete_reminder — удалить напоминание. params: {"reminder_id": число}
 - search — поиск по памяти. params: {"query": "поисковый запрос"}
-- show_facts — показать факты о пользователе. params: {}
+- show_facts — показать СЫРОЙ СПИСОК фактов (только для явных запросов: "покажи факты", "список фактов", "мои факты"). params: {}
+- forget_fact — удалить/забыть факт. params: {"fact_id": число}
 - chat — обычный разговор, вопрос, просьба, ничего из вышеперечисленного. params: {}
 
 Правила:
 - Если пользователь просит "запомни", "запиши", "сохрани заметку" — это create_note
 - Если "покажи заметки", "мои заметки", "список заметок" — list_notes
+- Если "удали заметку", "убери заметку" — delete_note
 - Если "мне нужно сделать", "создай задачу", "добавь задачу" — create_task
 - Если "мои задачи", "покажи задачи", "список задач" — list_tasks
+- Если "удали задачу", "убери задачу" — delete_task
 - Если "напомни мне", "создай напоминание" — create_reminder
+- Если "удали напоминание", "убери напоминание" — delete_reminder
 - Если "найди", "поищи", "что я записывал о" — search
-- Если "мои факты", "что ты знаешь обо мне" — show_facts
+- Если "покажи факты", "список фактов", "мои факты" — show_facts
+- Если "забудь факт", "удали факт", "забудь что" — forget_fact
+- ВАЖНО: вопросы о пользователе ("как меня зовут", "сколько мне лет", "что ты знаешь обо мне", "кто я") — это chat, НЕ show_facts. Бот должен ответить как в живом диалоге, используя память
 - Если ни одно не подходит — chat
 
 Верни JSON: {"intent": "...", "params": {...}}
@@ -87,12 +96,16 @@ class IntentService:
         handler = {
             "create_note": self._handle_create_note,
             "list_notes": self._handle_list_notes,
+            "delete_note": self._handle_delete_note,
             "create_task": self._handle_create_task,
             "list_tasks": self._handle_list_tasks,
             "task_done": self._handle_task_done,
+            "delete_task": self._handle_delete_task,
             "create_reminder": self._handle_create_reminder,
             "list_reminders": self._handle_list_reminders,
+            "delete_reminder": self._handle_delete_reminder,
             "search": self._handle_search,
+            "forget_fact": self._handle_forget_fact,
             "show_facts": self._handle_show_facts,
         }.get(intent)
 
@@ -202,6 +215,38 @@ class IntentService:
         for r in results:
             lines.append(f"[{r['type_label']}] (score: {r['score']}) {r['text'][:120]}")
         return "\n".join(lines)
+
+    async def _handle_delete_note(self, user_id: int, params: dict) -> str:
+        note_id = params.get("note_id")
+        if not note_id:
+            return "Не удалось определить ID заметки."
+        note_service = NoteService(self.session, self.chroma)
+        deleted = await note_service.delete_note(user_id, int(note_id))
+        return f"Заметка #{note_id} удалена." if deleted else f"Заметка #{note_id} не найдена."
+
+    async def _handle_delete_task(self, user_id: int, params: dict) -> str:
+        task_id = params.get("task_id")
+        if not task_id:
+            return "Не удалось определить ID задачи."
+        task_service = TaskService(self.session, self.chroma)
+        deleted = await task_service.delete_task(user_id, int(task_id))
+        return f"Задача #{task_id} удалена." if deleted else f"Задача #{task_id} не найдена."
+
+    async def _handle_delete_reminder(self, user_id: int, params: dict) -> str:
+        reminder_id = params.get("reminder_id")
+        if not reminder_id:
+            return "Не удалось определить ID напоминания."
+        reminder_service = ReminderService(self.session)
+        deleted = await reminder_service.delete_reminder(user_id, int(reminder_id))
+        return f"Напоминание #{reminder_id} удалено." if deleted else f"Напоминание #{reminder_id} не найдено."
+
+    async def _handle_forget_fact(self, user_id: int, params: dict) -> str:
+        fact_id = params.get("fact_id")
+        if not fact_id:
+            return "Не удалось определить ID факта."
+        fact_service = FactExtractionService(self.session, self.chroma)
+        deleted = await fact_service.delete_fact(user_id, int(fact_id))
+        return f"Факт #{fact_id} удалён." if deleted else f"Факт #{fact_id} не найден."
 
     async def _handle_show_facts(self, user_id: int, params: dict) -> str:
         fact_service = FactExtractionService(self.session, self.chroma)

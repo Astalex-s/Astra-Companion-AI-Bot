@@ -75,17 +75,16 @@ async def voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         intent_data = await intent_service.detect_intent(text)
         intent = intent_data.get("intent", "chat")
 
+        is_command = False
         if intent != "chat":
-            # Execute action
             result = await intent_service.execute_intent(user.id, intent_data)
             if result:
                 response = result
+                is_command = True
             else:
-                # Fallback to chat if execution returned None
                 chat_service = ChatService(session, chroma=chroma)
                 response = await chat_service.get_response(user, text)
         else:
-            # Regular chat
             chat_service = ChatService(session, chroma=chroma)
             response = await chat_service.get_response(user, text)
 
@@ -96,9 +95,12 @@ async def voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         except Exception as e:
             logger.warning("Fact extraction from voice failed: %s", e)
 
+    if is_command:
+        await delete_previous_bot_message(update.effective_chat.id, context)
+
     msg = None
     for chunk in split_message(response):
         msg = await update.message.reply_text(chunk)
 
-    if msg:
+    if is_command and msg:
         await save_bot_message(msg, context)
