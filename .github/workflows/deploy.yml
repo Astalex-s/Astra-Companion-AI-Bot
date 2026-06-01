@@ -1,0 +1,75 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Write .env to server
+        run: |
+          echo "${{ secrets.ENV_FILE }}" | ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p /opt/bots/astra-companion && cat > /opt/bots/astra-companion/.env"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            APP_DIR="/opt/bots/astra-companion"
+
+            # Install Docker if not present
+            if ! command -v docker &> /dev/null; then
+              echo "Installing Docker..."
+              apt-get update
+              apt-get install -y ca-certificates curl
+              install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+              chmod a+r /etc/apt/keyrings/docker.asc
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+              apt-get update
+              apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+              systemctl enable docker
+              systemctl start docker
+              echo "Docker installed"
+            fi
+
+            # Clone or pull repo
+            if [ -d "$APP_DIR/.git" ]; then
+              cd "$APP_DIR"
+              git pull origin main
+            else
+              mkdir -p /opt/bots
+              git clone https://github.com/Astalex-s/Astra-Companion-AI-Bot.git "$APP_DIR"
+              cd "$APP_DIR"
+            fi
+
+            # Fix hostnames for Docker network
+            cd "$APP_DIR"
+            sed -i 's|postgresql+asyncpg://astra:astra_password@localhost:|postgresql+asyncpg://astra:astra_password@postgres:|' .env
+            sed -i 's|CHROMADB_HOST=localhost|CHROMADB_HOST=chromadb|' .env
+
+            # Deploy with docker compose
+            cd "$APP_DIR/docker"
+            docker compose up -d --build --force-recreate
+
+            # Wait for postgres to be healthy, then run migrations
+            echo "Waiting for PostgreSQL..."
+            sleep 10
+            docker compose exec -T bot python -m alembic upgrade head
+
+            echo "Deploy complete!"
