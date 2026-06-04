@@ -1,4 +1,5 @@
 # AstraCompanion AI Bot
+Telegram: https://t.me/AstraCompanionAIBot
 
 <p align="center">
   <img src="bot_avatar.png" alt="AstraCompanion" width="200">
